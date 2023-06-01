@@ -1,4 +1,7 @@
 import json
+import smtplib
+from email.message import EmailMessage
+from pydantic import BaseModel
 import dotenv
 import uvicorn
 from fastapi import FastAPI
@@ -25,8 +28,22 @@ app.add_middleware(
 dotenv.load_dotenv()
 config = dotenv.dotenv_values()
 GITHUB_TOKEN = config['GITHUB']
+MAIL_PASSWORD = config['PASSWORD']
+MAIL_ADDRESS = config['EMAIL']
+REDIRECT = 'https://www.camarm.dev/contact?success'
 GITHUB = github.Github(GITHUB_TOKEN)
 STATS = {}
+
+
+class Person(BaseModel):
+    name: str
+    email: str
+
+
+class Message(BaseModel):
+    sender: Person
+    subject: str
+    content: str
 
 
 def countWithCodeFrequency(codeFrequency: list):
@@ -35,6 +52,29 @@ def countWithCodeFrequency(codeFrequency: list):
         count += code.additions
         count -= code.deletions
     return count
+
+
+def sendMail(message: Message):
+    try:
+        subject = message.subject
+        content = message.content
+        to_email, to_name = message.sender.email, message.sender.name
+        server = smtplib.SMTP('ns0.ovh.net', 5025)
+        server.set_debuglevel(1)
+        server.login(MAIL_ADDRESS, MAIL_PASSWORD)
+        msg = EmailMessage()
+        msg.set_content(f"{content}\n\nEnvoyé depuis https://www.camarm.fr par {to_name} ({to_email})")
+        msg['Subject'] = f'[www.camarm.dev] {subject}'
+        msg['From'] = "Mon Site Web <armand@camponovo.xyz>"
+        msg['To'] = f"{to_name} <{to_email}>"
+        server.sendmail(MAIL_ADDRESS, to_email, msg.as_string())
+        server.quit()
+    except Exception as error:
+        print(f"Error when send email: {error.__class__.__name__}")
+        return False
+    else:
+        print('Email sent correctly')
+    return True
 
 
 def refreshStats():
@@ -60,8 +100,21 @@ async def root():
 async def statistics():
     stats = json.loads(open('stats.json').read())['data']
     return {
-        "message": f"Successfully returned statistics",
+        "message": f"Successfully returned statistics.",
         "data": stats
+    }
+
+
+@app.post("/contact")
+async def contact(message: Message):
+    if sendMail(message):
+        return {
+            "message": f"Message successfully sent.",
+            "data": {}
+        }
+    return {
+        "message": f"Error occurred when sending message.",
+        "data": {}
     }
 
 if __name__ == '__main__':
