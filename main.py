@@ -4,12 +4,13 @@ from email.message import EmailMessage
 from pydantic import BaseModel
 import dotenv
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 import github
 import schedule
 from fastapi.middleware.cors import CORSMiddleware
+from starlette import status
 
-app = FastAPI()
+app = FastAPI(title="API for camarm.dev", description="Api to get stats and send emails. Developped for https://www.camarm.dev", version="1.1")
 origins = [
     "http://www.camarm.dev",
     "https://www.camarm.dev",
@@ -33,6 +34,7 @@ MAIL_ADDRESS = config['EMAIL']
 REDIRECT = 'https://www.camarm.dev/contact?success'
 GITHUB = github.Github(GITHUB_TOKEN)
 STATS = {}
+IPS = {}
 
 
 class Person(BaseModel):
@@ -54,20 +56,19 @@ def countWithCodeFrequency(codeFrequency: list):
     return count
 
 
-def sendMail(message: Message):
+def sendMail(message: Message, to):
     try:
         subject = message.subject
         content = message.content
-        to_email, to_name = message.sender.email, message.sender.name
+        from_email, from_name = message.sender.email, message.sender.name
         server = smtplib.SMTP('ns0.ovh.net', 5025)
         server.set_debuglevel(1)
         server.login(MAIL_ADDRESS, MAIL_PASSWORD)
         msg = EmailMessage()
-        msg.set_content(f"{content}\n\nEnvoyé depuis https://www.camarm.fr par {to_name} ({to_email})")
+        msg.set_content(f"{content}\n\nEnvoyé depuis https://www.camarm.fr par {from_name} ({from_email})")
         msg['Subject'] = f'[www.camarm.dev] {subject}'
-        msg['From'] = "Mon Site Web <armand@camponovo.xyz>"
-        msg['To'] = f"{to_name} <{to_email}>"
-        server.sendmail(MAIL_ADDRESS, to_email, msg.as_string())
+        msg['From'] = f"{from_name} <{from_email}>"
+        server.sendmail(MAIL_ADDRESS, to, msg.as_string())
         server.quit()
     except Exception as error:
         print(f"Error when send email: {error.__class__.__name__}")
@@ -106,16 +107,24 @@ async def statistics():
 
 
 @app.post("/contact")
-async def contact(message: Message):
-    if sendMail(message):
+async def contact(message: Message, request: Request):
+    user_ip = request.client.host
+    if IPS[user_ip]:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="You have already sent an email !"
+        )
+    if sendMail(message, "armand@camponovo.xyz"):
+        IPS[user_ip] = True
         return {
             "message": f"Message successfully sent.",
+            "code": 200,
             "data": {}
         }
-    return {
-        "message": f"Error occurred when sending message.",
-        "data": {}
-    }
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Error occurred when sending message.",
+    )
 
 if __name__ == '__main__':
     refreshStats()
