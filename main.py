@@ -79,6 +79,7 @@ def sendMail(message: Message, to):
 
 
 def refreshStats():
+    print("Getting new stats")
     gh_user = GITHUB.get_user()
     repos = [repo for org in gh_user.get_orgs() for repo in org.get_repos()] + [repo for repo in gh_user.get_repos()]
     repos_count = len(repos)
@@ -90,6 +91,7 @@ def refreshStats():
         "line_count": f"{str(lines_count / 1000000)[0:3]}+ M"
     }
     open('stats.json', 'w').write(json.dumps({'data': stats}))
+    print(f"Stats refreshed: {commits_count} commits, {repos_count} repos {lines_count} lines of code.")
 
 
 @app.get("/")

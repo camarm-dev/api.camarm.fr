@@ -1,5 +1,5 @@
 # api.camarm.fr - Api used by website frontend
-
+This is a private api. It's useless without a frontend.
 ## Run
 
 ```shell
