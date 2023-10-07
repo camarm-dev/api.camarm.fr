@@ -1,14 +1,19 @@
 import json
+import secrets
 import smtplib
 from email.message import EmailMessage
+import pymongo
+import requests
+from bson import ObjectId
 from pydantic import BaseModel
 import dotenv
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
-import github
-import schedule
+from fastapi import FastAPI, HTTPException, Request, Form, File, UploadFile, Path, Query
+from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette import status
+from jinja2 import Template
+from typing import Annotated
 
 app = FastAPI(title="API for camarm.dev", description="Api to get stats and send emails. Developped for https://www.camarm.dev", version="1.1")
 origins = [
@@ -28,13 +33,20 @@ app.add_middleware(
 )
 dotenv.load_dotenv()
 config = dotenv.dotenv_values()
-GITHUB_TOKEN = config['GITHUB']
 MAIL_PASSWORD = config['PASSWORD']
 MAIL_ADDRESS = config['EMAIL']
+MASTER_PASSWORD = config['MASTER_PASSWORD']
 REDIRECT = 'https://www.camarm.dev/contact?success'
-GITHUB = github.Github(GITHUB_TOKEN)
 STATS = {}
 IPS = {}
+mongo = pymongo.MongoClient(config['DATABASE'])
+customerPage = Template(open('front/index.html').read())
+loginPage = open('front/login.html').read()
+adminLoginPage = open('front/admin_login.html').read()
+adminPage = Template(open('front/admin.html').read())
+customers = mongo.Customers.customers
+resources = mongo.Customers.resources
+messages = mongo.Customers.messages
 
 
 class Person(BaseModel):
@@ -48,28 +60,24 @@ class Message(BaseModel):
     content: str
 
 
-def countWithCodeFrequency(codeFrequency: list):
-    count = 0
-    for code in codeFrequency:
-        count += code.additions
-        count -= code.deletions
-    return count
+class CustomerMessage(Message):
+    api_key: str
+
+
+class LoginPayload(BaseModel):
+    key: str
 
 
 def sendMail(message: Message, to):
+    data = {
+        "fromAddress": MAIL_ADDRESS,
+        "toAddress": to,
+        "subject": message.subject,
+        "content": message.content
+    }
     try:
-        subject = message.subject
-        content = message.content
-        from_email, from_name = message.sender.email, message.sender.name
-        server = smtplib.SMTP('ns0.ovh.net', 5025)
-        server.set_debuglevel(1)
-        server.login(MAIL_ADDRESS, MAIL_PASSWORD)
-        msg = EmailMessage()
-        msg.set_content(f"{content}\n\nEnvoyé depuis https://www.camarm.fr par {from_name} ({from_email})")
-        msg['Subject'] = f'[www.camarm.dev] {subject}'
-        msg['From'] = f"{from_name} <{from_email}>"
-        server.sendmail(MAIL_ADDRESS, to, msg.as_string())
-        server.quit()
+        response = requests.post('https://mail.zoho.eu/api/accounts/20093658488/messages', data=data)
+        return response.ok
     except Exception as error:
         print(f"Error when send email: {error.__class__.__name__}")
         return False
@@ -78,21 +86,36 @@ def sendMail(message: Message, to):
     return True
 
 
-def refreshStats():
-    print("Getting new stats")
-    gh_user = GITHUB.get_user()
-    repos = [repo for org in gh_user.get_orgs() for repo in org.get_repos()] + [repo for repo in gh_user.get_repos()]
-    repos_count = len(repos)
-    commits_count = sum([repo.get_commits().totalCount for repo in repos])
-    lines_count = sum([countWithCodeFrequency(repo.get_stats_code_frequency()) for repo in repos])
-    stats = {
-        "repo_count": repos_count,
-        "commit_count": commits_count,
-        "line_count": f"{str(lines_count / 1000000)[0:3]}+ M"
-    }
-    open('stats.json', 'w').write(json.dumps({'data': stats}))
-    print(f"Stats refreshed: {commits_count} commits, {repos_count} repos {lines_count} lines of code.")
+def validApiKey(key: str):
+    customer = customers.find_one({'key': key})
+    if customer:
+        return customer['valid'], customer
+    return False, {}
 
+
+def getResources(customer: str):
+    customerResources = resources.find({'customer': customer})
+    if customerResources:
+        return customerResources
+    return []
+
+
+def getMessages(customer: str):
+    customerMessages = messages.find({'customer': customer})
+    if customerMessages:
+        return customerMessages
+    return []
+
+
+def isAdmin(key: str):
+    return key == MASTER_PASSWORD
+
+
+def fillCustomerObject(customer: dict):
+    customer['resources'] = getResources(str(customer['_id']))
+    customer['messages'] = getMessages(str(customer['_id']))
+    return customer
+    
 
 @app.get("/")
 async def root():
@@ -128,7 +151,125 @@ async def contact(message: Message, request: Request):
         detail="Error occurred when sending message.",
     )
 
+
+@app.get("/customer")
+async def getCustomer(api_key: str):
+    valid, customerObject = validApiKey(api_key)
+    if valid:
+        customerResources = getResources(customerObject['_id'])
+        return {
+            **customerObject,
+            "ressources": customerResources
+        }
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="API key not valid !"
+    )
+
+
+@app.post("/customer/send-mail")
+async def sendCustomerMail(message: CustomerMessage):
+    isValidKey, customerObject = validApiKey(message.api_key)
+    if isValidKey:
+        if sendMail(message, customerObject['email']):
+            return {
+                "message": f"Message successfully sent.",
+                "code": 200,
+                "data": {}
+            }
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error occurred when sending message.",
+        )
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="API key not valid !"
+    )
+
+
+@app.post('/ui', response_class=HTMLResponse)
+async def customerInterface(key: Annotated[str, Form()]):
+    isValidKey, customerObject = validApiKey(key)
+    if isValidKey:
+        customerObject['resources'] = getResources(str(customerObject['_id']))
+        customerObject['messages'] = getMessages(str(customerObject['_id']))
+        return customerPage.render(customer=customerObject)
+    return loginPage
+
+
+@app.get('/login', response_class=HTMLResponse)
+async def loginInterface():
+    return loginPage
+
+
+@app.get('/admin', response_class=HTMLResponse)
+async def adminLoginInterface():
+    return adminLoginPage
+
+
+@app.post('/admin/new-customer')
+async def addCustomer(org: Annotated[str, Form()], person: Annotated[str, Form()], email: Annotated[str, Form()]):
+    token = f"c_{secrets.token_urlsafe(32)}"
+    customers.insert_one({
+        'org': org,
+        'contact': person,
+        'email': email,
+        'key': token,
+        'valid': True
+    })
+    return
+
+
+@app.post('/admin/add-message')
+async def addMessageToCustomer(customer: Annotated[str, Form()], name: Annotated[str, Form()], content: Annotated[str, Form()]):
+    customerObject = customers.find_one({'_id': ObjectId(customer)})
+    if customerObject:
+        messages.insert_one({
+            'customer': customer,
+            'name': name,
+            'content': content
+        })
+    return
+
+
+@app.post('/admin/add-resource')
+async def addResourceToCustomer(customer: Annotated[str, Form()], name: Annotated[str, Form()], resource: UploadFile):
+    customerObject = customers.find_one({'_id': ObjectId(customer)})
+    if customerObject:
+        fileExtension = resource.filename.split('.')[-1]
+        resourceId = resources.insert_one({
+            'customer': customer,
+            'name': name,
+            'filename': resource.filename,
+            'extension': fileExtension
+        }).inserted_id
+        open(f"files/{resourceId}.{fileExtension}", 'wb+').write(await resource.read())
+    return
+
+
+@app.post('/admin', response_class=HTMLResponse)
+async def adminInterface(key: Annotated[str, Form()]):
+    if isAdmin(key):
+        customersObjects = [fillCustomerObject(customer) for customer in customers.find()]
+        return adminPage.render(customers=customersObjects)
+    return adminLoginPage
+
+
+@app.get('/favicon.ico')
+async def favicon():
+    return FileResponse('front/favicon.png')
+
+
+@app.get('/download/{rid}')
+async def downloadResource(key: Annotated[str, Query()], rid: Annotated[str, Path(title="The resource ID to download")]):
+    isValid, customerObject = validApiKey(key)
+    if isValid:
+        resource = resources.find_one({'_id': ObjectId(rid)})
+        return FileResponse(f"files/{rid}.{resource['extension']}")
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="API key not valid !"
+    )
+
 if __name__ == '__main__':
-    refreshStats()
-    schedule.every().hour.do(refreshStats)
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=8080, log_level="info")

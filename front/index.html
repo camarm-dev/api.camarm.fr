@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Customers Panel | CAMARM Inc</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+</head>
+<body>
+<section class="section">
+  <h1 class="title">Welcome, to your <span class="rainbow">dashboard</span> {{ customer.contact }}</h1>
+  <h3 class="subtitle">Retrieve your ressources and check news.</h3>
+  <div class="columns">
+    <div class="column">
+      <div class="container">
+        <div class="card">
+          <div class="card-content">
+            <div class="media-content">
+              <p class="title is-4">{{ customer.contact }} | {{ customer.org }}</p>
+              <p class="subtitle is-6">{{ customer.email }}</p>
+            </div>
+            <div class="content">
+              My key: <span style="cursor: pointer" class="has-text-black has-background-black" onclick="this.classList.toggle('has-text-black'); this.classList.toggle('has-background-black')">{{ customer.key }}</span> (click to show)
+              <br>
+              <br>
+              <button class="button is-info" onclick="navigator.clipboard.write('{{customer.key}}'); alert('Copied'); this.classList.add('is-success'); setTimeout(() => { this.classList.remove('is-success') }, 2500)">Copy</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="column">
+      <p class="has-text-grey">Your resources</p>
+      {% for resource in customer.resources %}
+        <div class="box">
+          <p class="subtitle">{{ resource.name }}</p>
+          <p>Download <a class="has-text-dark" href="http://0.0.0.0:8080/download/{{resource._id}}?key={{customer.key}}" download="{{resource.filename}}"><span class="rainbow">{{ resource.filename }}</span></a></p>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="column">
+      <p class="has-text-grey">Your messages</p>
+      {% for message in customer.messages %}
+      <article class="message">
+        <div class="message-header">
+          <p>{{ message.name }}</p>
+        </div>
+        <div class="message-body">
+          {{ message.content }}
+        </div>
+      </article>
+      {% endfor %}
+      <div class="content">
+        <h6>
+          These are not important messages for you. To launch a conversation with us please contact <a href="mailto:contact@camarm.dev" class="rainbow">contact@camarm.dev</a>
+        </h6>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+<style>
+    .rainbow {
+        background: -webkit-linear-gradient(45deg, #e54e21, #4d25c4);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .button:not(.is-success) {
+        background: -webkit-linear-gradient(45deg, #e54e21, #4d25c4);
+    }
+
+    .has-text-grey {
+        margin-bottom: 1em;
+    }
+</style>
+<script>
+  function download(link, name) {
+      const el = document.createElement('a')
+      el.href = link
+      el.download = name
+      el.click()
+  }
+</script>
+</html>

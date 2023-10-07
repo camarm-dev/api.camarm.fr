@@ -5,3 +5,5 @@ schedule~=1.2.0
 pydantic~=1.10.7
 fastapi~=0.70.1
 starlette~=0.16.0
+pymongo
+python-multipart

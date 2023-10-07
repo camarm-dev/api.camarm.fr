@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Panel | CAMARM Inc</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+</head>
+<body>
+<section class="section">
+  <h1 class="title">Welcome back <span class="rainbow">administrator</span></h1>
+  <h3 class="subtitle">Check customers, upload resources...</h3>
+  <br>
+  <br>
+  <p class="has-text-grey">Customers</p>
+  <div class="columns">
+    {% for customer in customers %}
+      <div class="column is-one-quarter">
+        <div class="card">
+          <div class="card-content">
+            <div class="media-content">
+              <p class="title is-4">{{ customer.contact }}</p>
+              <p class="subtitle is-6">{{ customer.email }}</p>
+            </div>
+            <div class="content">
+              Customer access key: <span style="cursor: pointer" class="has-text-black has-background-black" onclick="this.classList.toggle('has-text-black'); this.classList.toggle('has-background-black')">{{ customer.key }}</span> (click to show)
+              <br>
+              <button class="button is-info" onclick="navigator.clipboard.write('{{ customer.key }}'); this.classList.add('is-success'); setTimeout(() => { this.classList.remove('is-success') }, 2500)">Copy</button>
+              <button class="button is-info" onclick="openModal('{{ customer.key }}')">Introspect</button>
+            </div>
+            <div class="modal" id="{{ customer.key }}">
+              <div class="modal-background"></div>
+              <div class="modal-content">
+                <div class="box">
+                  <div class="columns">
+                    <div class="column">
+                      {% for resource in customer.resources %}
+                      <article class="message">
+                        <div class="message-header">
+                          <p>{{ resource.name }}</p>
+                        </div>
+                        <div class="message-body">
+                          <a class="no-decoration" href="http://0.0.0.0:8080/download/{{resource._id}}?key={{customer.key}}" download="{{resource.filename}}">Download <span class="rainbow">{{ resource.filename }}</span></a>
+                        </div>
+                      </article>
+                      {% endfor %}
+                    </div>
+                    <div class="column">
+                      {% for message in customer.messages %}
+                        <article class="message">
+                          <div class="message-header">
+                            <p>{{ message.name }}</p>
+                          </div>
+                          <div class="message-body">
+                            {{ message.content }}
+                          </div>
+                        </article>
+                      {% endfor %}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <button class="modal-close is-large" aria-label="close" onclick="openModal('{{ customer.key }}')"></button>
+            </div>
+            <details>
+              <summary>Ajouter un message</summary>
+              <div class="content">
+                <form data-customer-id="{{ customer._id }}">
+                  <div class="field">
+                    <label class="label">Nom du message</label>
+                    <div class="control">
+                      <input class="input" name="name" type="text" placeholder="Votre site est livré">
+                    </div>
+                  </div>
+
+                  <div class="field">
+                    <label class="label">Message</label>
+                    <div class="control">
+                      <textarea class="textarea" name="content" placeholder="Vous pouvez désormais récupérer l'archive contenant votre site sur votre panel..."></textarea>
+                    </div>
+                  </div>
+                  <button class="button is-info" type="button" onclick="sendForm('/admin/add-message', this.parentElement)">Envoyer</button>
+                </form>
+              </div>
+            </details>
+            <details>
+              <summary>Ajouter une resource</summary>
+              <div class="content">
+                <form data-customer-id="{{ customer._id }}">
+                  <div class="field">
+                    <label class="label">Nom du fichier</label>
+                    <div class="control">
+                      <input class="input" name="name" type="text" placeholder="Votre site est livré">
+                    </div>
+                  </div>
+
+                  <div class="field">
+                    <div class="file">
+                      <label class="file-label">
+                        <input class="file-input" type="file" name="resource">
+                        <span class="file-cta">
+                        <span class="file-label">
+                          Choisir le fichier
+                        </span>
+                      </span>
+                      </label>
+                    </div>
+                  </div>
+                  <button class="button is-info" type="button" onclick="sendForm('/admin/add-resource', this.parentElement)">Envoyer</button>
+                </form>
+              </div>
+            </details>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+  <div class="container">
+    <p class="has-text-grey">Add customer</p>
+    <form class="box">
+      <div class="field">
+        <label class="label">Organisation</label>
+        <div class="control">
+          <input class="input" name="org" type="text" placeholder="Company, Inc">
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="label">Contact</label>
+        <div class="control">
+          <input class="input" name="person" type="text" placeholder="John Doe">
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="label">Email</label>
+        <div class="control">
+          <input class="input" name="email" type="text" placeholder="john@company.com">
+        </div>
+      </div>
+
+      <button class="button is-link" type="button" onclick="sendForm('/admin/new-customer', this.parentElement)">Ajouter</button>
+    </form>
+  </div>
+</section>
+</body>
+<style>
+  .rainbow {
+      background: -webkit-linear-gradient(45deg, #e54e21, #4d25c4);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+  }
+
+  .button:not(.is-success) {
+      background: -webkit-linear-gradient(45deg, #e54e21, #4d25c4);
+  }
+
+  details {
+      cursor: pointer
+  }
+
+  .no-decoration {
+      text-decoration: none;
+  }
+
+  .has-text-grey {
+      margin-bottom: 1em;
+  }
+</style>
+<script>
+  function sendForm(action, form) {
+      const data = new FormData(form)
+      data.append('customer', form.getAttribute('data-customer-id'))
+      fetch(action, {
+          method: 'POST',
+          body: data,
+      })
+  }
+
+  function openModal(id) {
+      document.getElementById(id).classList.toggle('is-active')
+  }
+</script>
+</html>
