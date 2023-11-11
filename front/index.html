@@ -25,6 +25,9 @@
               <br>
               <button class="button is-info" onclick="navigator.clipboard.write('{{customer.key}}'); alert('Copied'); this.classList.add('is-success'); setTimeout(() => { this.classList.remove('is-success') }, 2500)">Copy</button>
             </div>
+            <div class="content">
+              My apis: {% for api in customer.apis %}<br><span class="rainbow has-text-uppercase">{{ api }}</span>{% endfor %}
+            </div>
           </div>
         </div>
       </div>
@@ -38,6 +41,13 @@
           <p>Download <a class="has-text-dark" href="http://0.0.0.0:8080/download/{{resource._id}}?key={{customer.key}}" download="{{resource.filename}}"><span class="rainbow">{{ resource.filename }}</span></a></p>
         </div>
       {% endfor %}
+      {% if customer.resources|list|length == 0 %}
+        <div class="content">
+          <h6>
+            No resources for the moment !
+          </h6>
+        </div>
+      {% endif %}
     </div>
 
     <div class="column">

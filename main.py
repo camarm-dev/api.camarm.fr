@@ -83,6 +83,10 @@ def validApiKey(key: str):
     return False, {}
 
 
+def hasApi(api: str, customer: dict):
+    return api in customer.get('apis', [])
+
+
 def getResources(customer: str):
     customerResources = resources.find({'customer': customer})
     if customerResources:
@@ -160,7 +164,7 @@ async def getCustomer(api_key: str):
 @app.post("/customer/send-mail")
 async def sendCustomerMail(message: CustomerMessage):
     isValidKey, customerObject = validApiKey(message.api_key)
-    if isValidKey:
+    if isValidKey and hasApi('mailing', customerObject):
         if sendMail(message, customerObject['email']):
             return {
                 "message": f"Message successfully sent.",
@@ -172,8 +176,8 @@ async def sendCustomerMail(message: CustomerMessage):
             detail="Error occurred when sending message.",
         )
     raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="API key not valid !"
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="Error occurred when sending message.",
     )
 
 
@@ -205,7 +209,10 @@ async def addCustomer(org: Annotated[str, Form()], person: Annotated[str, Form()
         'contact': person,
         'email': email,
         'key': token,
-        'valid': True
+        'valid': True,
+        'apis': [
+            'mailing'
+        ]
     })
     return
 
