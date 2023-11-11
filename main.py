@@ -17,11 +17,7 @@ from typing import Annotated
 
 app = FastAPI(title="API for camarm.dev", description="Api to get stats and send emails. Developped for https://www.camarm.dev", version="1.1")
 origins = [
-    "http://www.camarm.dev",
-    "https://www.camarm.dev",
-    "http://www.camarm.fr",
-    "https://www.camarm.fr",
-    "http://localhost:3000",
+    "*"
 ]
 
 app.add_middleware(
