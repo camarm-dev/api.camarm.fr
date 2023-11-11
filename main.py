@@ -6,8 +6,8 @@ from bson import ObjectId
 from pydantic import BaseModel
 import dotenv
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, Form, File, UploadFile, Path, Query
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi import FastAPI, HTTPException, Request, Form, UploadFile, Path, Query
+from fastapi.responses import HTMLResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette import status
 from jinja2 import Template
@@ -109,7 +109,7 @@ def fillCustomerObject(customer: dict):
 
 @app.get("/")
 async def root():
-    return {"message": "Hello World ! Check /docs for swagger !"}
+    return RedirectResponse('/login')
 
 
 @app.get("/statistics")
