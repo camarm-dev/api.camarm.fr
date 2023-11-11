@@ -1,7 +1,5 @@
 import json
 import secrets
-import smtplib
-from email.message import EmailMessage
 import pymongo
 import requests
 from bson import ObjectId
