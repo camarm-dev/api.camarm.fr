@@ -1,5 +1,9 @@
 import json
 import secrets
+import smtplib
+import ssl
+from email.message import EmailMessage
+
 import pymongo
 import requests
 from bson import ObjectId
@@ -58,16 +62,22 @@ class LoginPayload(BaseModel):
     key: str
 
 
-def sendMail(message: Message, to):
-    data = {
-        "fromAddress": MAIL_ADDRESS,
-        "toAddress": to,
-        "subject": message.subject,
-        "content": message.content
-    }
+def sendMail(message: Message, to, send_from=''):
     try:
-        response = requests.post('https://mail.zoho.eu/api/accounts/20093658488/messages', data=data)
-        return response.ok
+        subject = message.subject
+        content = message.content
+        from_email, from_name = message.sender.email, message.sender.name
+        msg = EmailMessage()
+        msg.set_content(f"{content}\n\n{send_from}")
+        msg['Subject'] = f'{subject}'
+        msg['From'] = f"{from_name} <noreply@camarm.dev>"
+
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL('smtp.zoho.eu', 465, context=context) as server:
+            server.ehlo()
+            server.auth("PLAIN", lambda: f"\0{MAIL_ADDRESS}\0{MAIL_PASSWORD}")
+            server.sendmail(MAIL_ADDRESS, to, msg.as_string())
+            server.quit()
     except Exception as error:
         print(f"Error when send email: {error.__class__.__name__}")
         return False
@@ -133,7 +143,7 @@ async def contact(message: Message, request: Request):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="You have already sent an email !"
         )
-    if sendMail(message, "armand@camponovo.xyz"):
+    if sendMail(message, "contact@camarm.dev", f"Envoyé depuis https://www.camarm.fr par {message.sender.name} ({message.sender.email})"):
         IPS[user_ip] = True
         return {
             "message": f"Message successfully sent.",
@@ -165,7 +175,7 @@ async def getCustomer(api_key: str):
 async def sendCustomerMail(message: CustomerMessage):
     isValidKey, customerObject = validApiKey(message.api_key)
     if isValidKey and hasApi('mailing', customerObject):
-        if sendMail(message, customerObject['email']):
+        if sendMail(message, customerObject['email'], f"Envoyé depuis un service de \"{customerObject['org']}\" par {message.sender.name} ({message.sender.email})"):
             return {
                 "message": f"Message successfully sent.",
                 "code": 200,
