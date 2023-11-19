@@ -7,3 +7,4 @@ fastapi~=0.70.1
 starlette~=0.16.0
 pymongo
 python-multipart
+jinja2

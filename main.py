@@ -5,7 +5,6 @@ import ssl
 from email.message import EmailMessage
 
 import pymongo
-import requests
 from bson import ObjectId
 from pydantic import BaseModel
 import dotenv
