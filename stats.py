@@ -28,7 +28,7 @@ def refreshStats():
     stats = {
         "repo_count": repos_count,
         "commit_count": commits_count,
-        "line_count": f"{str(lines_count / 1000)[0:4]}+ K"
+        "line_count": f"{str(lines_count / 1000000)[0:4]}+ M"
     }
     open('stats.json', 'w').write(json.dumps({'data': stats}))
     print(f"Stats refreshed: {commits_count} commits, {repos_count} repos {lines_count} lines of code.")
