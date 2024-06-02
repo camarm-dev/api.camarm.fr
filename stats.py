@@ -21,7 +21,13 @@ def countWithCodeFrequency(codeFrequency: list):
 def refreshStats():
     print("Getting new stats")
     gh_user = GITHUB.get_user()
-    repos = [repo for org in gh_user.get_orgs() for repo in org.get_repos()] + [repo for repo in gh_user.get_repos()]
+    all_repos = [repo for org in gh_user.get_orgs() for repo in org.get_repos()] + [repo for repo in gh_user.get_repos()]
+    repos = []
+    for r in all_repos:
+        if r.full_name.startswith('Papillon') or r.full_name.startswith('LeMaitre4523') or r.full_name.startswith('azgarsncf') or r.size == 0:
+            continue
+        else:
+            repos.append(r)
     repos_count = len(repos)
     commits_count = sum([repo.get_commits().totalCount for repo in repos])
     lines_count = sum([countWithCodeFrequency(repo.get_stats_code_frequency()) for repo in repos])
